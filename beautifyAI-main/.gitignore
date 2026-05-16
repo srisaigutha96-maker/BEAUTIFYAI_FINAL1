@@ -1,0 +1,43 @@
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+env/
+.venv/
+.env
+
+# AI / Model Files
+*.pth
+*.pt
+*.onnx
+*.ckpt
+checkpoint/
+
+# Zip Files
+*.zip
+
+# CodeFormer Temp/Weights
+backend/temp_cf_out/
+backend/CodeFormer-master/weights/
+backend/CodeFormer-master/results/
+backend/CodeFormer-master/input/
+backend/CodeFormer-master/output/
+
+# Project Specific
+backend/users.db
+
+# Images / Generated Outputs
+*.jpg
+*.png
+
+# OS files
+.DS_Store
+Thumbs.db
