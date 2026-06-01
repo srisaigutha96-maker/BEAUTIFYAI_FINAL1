@@ -176,6 +176,12 @@ app.post('/beautify', upload.single('image'), async (req, res) => {
     if (error) {
       console.error(`[BeautifyAI] ❌ Inference failed: ${error.message}`);
       console.error(`[BeautifyAI]    stderr: ${stderr}`);
+      
+      if (stdout.includes("NO_FACE_DETECTED") || stderr.includes("NO_FACE_DETECTED")) {
+        _safeRemove(inputPath);
+        return res.status(400).json({ success: false, message: 'No human face detected in the image. Please upload a clear photo of a person.' });
+      }
+      
       return _fallbackResponse(res, inputPath, `AI inference failed: ${error.message}`);
     }
 
@@ -223,8 +229,9 @@ app.post('/api/beautify', upload.single('image'), (req, res) => {
   const intensity = req.body.intensity || 0.5;
   const child = spawn('python', ['main.py', '-i', req.file.path, '-o', afterPath, '-int', intensity], { cwd: __dirname });
 
-  child.stdout.on('data', data => console.log(`[CodeFormer]: ${data}`));
-  child.stderr.on('data', data => console.error(`[CodeFormer Error]: ${data}`));
+  let outData = '';
+  child.stdout.on('data', data => { outData += data; console.log(`[CodeFormer]: ${data}`) });
+  child.stderr.on('data', data => { outData += data; console.error(`[CodeFormer Error]: ${data}`) });
 
   child.on('error', (err) => {
     console.error(`[BeautifyAI] ❌ Failed to start CodeFormer process: ${err.message}`);
@@ -239,6 +246,12 @@ app.post('/api/beautify', upload.single('image'), (req, res) => {
 
   child.on('close', (code) => {
     _safeRemove(req.file.path); // Remove multer initial chunk
+
+    if (outData.includes("NO_FACE_DETECTED")) {
+      _safeRemove(beforePath);
+      _safeRemove(afterPath);
+      return res.status(400).json({ success: false, message: 'No human face detected in the image. Please upload a clear photo of a person.' });
+    }
 
     if (code !== 0 || !fs.existsSync(afterPath)) {
       console.warn(`[BeautifyAI] ⚠️ CodeFormer failed (code ${code}). Serving Pillow-enhanced fallback.`);

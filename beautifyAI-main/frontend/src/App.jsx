@@ -1808,6 +1808,66 @@ function UploadPage({ onBack }) {
   const [statusType, setStatusType]       = useState('');   // 'success' | 'fallback' | 'error'
   const [errorMsg, setErrorMsg]           = useState('');
 
+  // Camera states
+  const [isCameraOpen, setIsCameraOpen]   = useState(false);
+  const [cameraError, setCameraError]     = useState('');
+  const videoRef = useRef(null);
+  const canvasRef = useRef(null);
+
+  const openCamera = async () => {
+    setIsCameraOpen(true);
+    setCameraError('');
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+      }
+    } catch (err) {
+      console.error("Camera error:", err);
+      setCameraError('Unable to access camera. Please check permissions.');
+    }
+  };
+
+  const closeCamera = () => {
+    if (videoRef.current && videoRef.current.srcObject) {
+      videoRef.current.srcObject.getTracks().forEach(track => track.stop());
+    }
+    setIsCameraOpen(false);
+  };
+
+  const capturePhoto = () => {
+    if (videoRef.current && canvasRef.current) {
+      const video = videoRef.current;
+      const canvas = canvasRef.current;
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const ctx = canvas.getContext('2d');
+      // Mirror if necessary, but native webcam is usually already correctly oriented or mirrored by default
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      
+      canvas.toBlob((blob) => {
+        if (!blob) return;
+        const file = new File([blob], "camera_capture.jpg", { type: "image/jpeg" });
+        setSelectedFile(file);
+        const url = URL.createObjectURL(file);
+        setSelectedImage(url);
+        setOriginalImage(url);
+        setEnhanced(false);
+        setStatusMsg('');
+        setStatusType('');
+        setErrorMsg('');
+        closeCamera();
+      }, 'image/jpeg', 0.95);
+    }
+  };
+
+  // Cleanup camera on unmount
+  useEffect(() => {
+    return () => {
+      closeCamera();
+    };
+  }, []);
+
   // Intensity state with localStorage persistence
   const [intensity, setIntensity] = useState(() => {
     const saved = localStorage.getItem('beautify_intensity');
@@ -1851,13 +1911,21 @@ function UploadPage({ onBack }) {
 
       if (!response.ok) {
         console.error(`[BeautifyAI] ❌ Backend returned error: ${response.status} ${response.statusText}`);
-        // Automatic one-time retry for server errors
-        if (retryCount < 1) {
+        
+        let errorMsg = `Server returned ${response.status}`;
+        try {
+          const errData = await response.json();
+          if (errData.message) errorMsg = errData.message;
+        } catch(e) {
+          errorMsg = await response.text().catch(() => errorMsg);
+        }
+
+        // Automatic one-time retry for server errors (5xx only, not 4xx client errors like no face)
+        if (response.status >= 500 && retryCount < 1) {
           console.log(`[BeautifyAI] 🔄 Retrying... (Attempt ${retryCount + 1})`);
           return handleEnhance(retryCount + 1);
         }
-        const errText = await response.text().catch(() => '');
-        throw new Error(errText || `Server returned ${response.status}`);
+        throw new Error(errorMsg);
       }
 
       const data = await response.json();
@@ -1875,17 +1943,25 @@ function UploadPage({ onBack }) {
     } catch (error) {
       console.error('[BeautifyAI] ❌ Fetch Error:', error);
       
-      let friendlyMsg = 'Enhancement is temporarily unavailable. Showing your original image instead.';
+      let friendlyMsg = error.message;
       if (error.message.includes('Failed to fetch') || error.message.includes('ECONNREFUSED')) {
         friendlyMsg = 'Cannot connect to the AI server. Please make sure the backend is running (port 8000).';
         setErrorMsg('Connection failed. Is the backend started?');
+      } else {
+        setErrorMsg(friendlyMsg); // Show the specific error (e.g. no face detected)
       }
       
-      // Implement graceful fallback behavior
-      setSelectedImage(originalImage);
-      setEnhanced(true);
-      setStatusType('fallback');
-      setStatusMsg(friendlyMsg);
+      // If it's a specific validation error (like no face), don't set 'enhanced' to true
+      // since no fallback image should be shown, just the error.
+      if (error.message.includes('No human face')) {
+        setEnhanced(false);
+      } else {
+        // Implement graceful fallback behavior for other backend failures
+        setSelectedImage(originalImage);
+        setEnhanced(true);
+        setStatusType('fallback');
+        setStatusMsg('Enhancement is temporarily unavailable. Showing your original image instead.');
+      }
     } finally {
       setIsEnhancing(false);
     }
@@ -1968,15 +2044,71 @@ function UploadPage({ onBack }) {
           </p>
 
           {!selectedImage ? (
-            /* ── Drop zone ── */
-            <label className="border-2 border-dashed border-violet-200 bg-violet-50/50 hover:bg-violet-50 rounded-3xl p-12 flex flex-col items-center justify-center cursor-pointer transition-colors group">
-              <input type="file" className="hidden" accept="image/*" onChange={handleImageChange} />
-              <div className="w-16 h-16 bg-white rounded-full shadow-sm flex items-center justify-center mb-4 group-hover:scale-110 group-active:scale-95 transition-transform">
-                <Upload className="w-6 h-6 text-violet-500" />
+            isCameraOpen ? (
+              /* ── Camera UI ── */
+              <div className="flex flex-col items-center gap-4 w-full animate-in fade-in zoom-in duration-300">
+                {cameraError ? (
+                  <div className="w-full bg-red-50 border border-red-200 text-red-700 text-sm font-medium px-4 py-3 rounded-xl flex items-start gap-2 text-left">
+                    <span className="shrink-0 mt-0.5">⚠️</span>
+                    <span>{cameraError}</span>
+                  </div>
+                ) : (
+                  <div className="relative rounded-2xl overflow-hidden w-full max-w-md bg-black shadow-lg flex items-center justify-center">
+                    <video 
+                      ref={videoRef} 
+                      autoPlay 
+                      playsInline 
+                      className="w-full h-auto max-h-[60vh] object-cover scale-x-[-1]" 
+                    />
+                  </div>
+                )}
+                <canvas ref={canvasRef} className="hidden" />
+                <div className="flex gap-3 w-full max-w-md mt-2">
+                  <button 
+                    onClick={closeCamera} 
+                    className="flex-1 py-3.5 rounded-xl font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  {!cameraError && (
+                    <button 
+                      onClick={capturePhoto} 
+                      className="flex-1 py-3.5 rounded-xl font-bold text-white bg-violet-600 hover:bg-violet-700 transition-colors shadow-lg shadow-violet-500/30 flex items-center justify-center gap-2"
+                    >
+                      <Camera className="w-5 h-5" /> Capture Photo
+                    </button>
+                  )}
+                </div>
               </div>
-              <span className="font-semibold text-violet-700 text-lg">Click to browse or drag &amp; drop</span>
-              <span className="text-slate-400 text-sm mt-2">JPG, PNG up to 10MB</span>
-            </label>
+            ) : (
+              /* ── Drop zone & Camera options ── */
+              <div className="flex flex-col gap-5 w-full">
+                <label className="border-2 border-dashed border-violet-200 bg-violet-50/50 hover:bg-violet-50 rounded-3xl p-10 flex flex-col items-center justify-center cursor-pointer transition-colors group">
+                  <input type="file" className="hidden" accept="image/*" onChange={handleImageChange} />
+                  <div className="w-14 h-14 bg-white rounded-full shadow-sm flex items-center justify-center mb-3 group-hover:scale-110 group-active:scale-95 transition-transform">
+                    <Upload className="w-5 h-5 text-violet-500" />
+                  </div>
+                  <span className="font-semibold text-violet-700 text-lg">Upload an image</span>
+                  <span className="text-slate-400 text-sm mt-1">Browse or drag &amp; drop</span>
+                </label>
+                
+                <div className="relative flex items-center">
+                  <div className="flex-grow border-t border-slate-200"></div>
+                  <span className="flex-shrink-0 mx-4 text-slate-400 text-xs font-bold tracking-wider uppercase">OR</span>
+                  <div className="flex-grow border-t border-slate-200"></div>
+                </div>
+
+                <button 
+                  onClick={openCamera}
+                  className="w-full py-5 rounded-3xl border border-slate-200 bg-white hover:border-violet-300 hover:shadow-lg transition-all duration-300 group flex items-center justify-center gap-3"
+                >
+                  <div className="w-12 h-12 bg-slate-50 rounded-full flex items-center justify-center group-hover:bg-violet-100 group-hover:scale-110 transition-transform">
+                    <Camera className="w-5 h-5 text-slate-500 group-hover:text-violet-600 transition-colors" />
+                  </div>
+                  <span className="font-semibold text-slate-700 group-hover:text-violet-700 text-lg transition-colors">Take a Photo</span>
+                </button>
+              </div>
+            )
           ) : (
             /* ── Preview + actions ── */
             <div className="flex flex-col items-center gap-6 w-full">

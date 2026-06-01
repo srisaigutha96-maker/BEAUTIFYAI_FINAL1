@@ -61,12 +61,33 @@ def _dl_enhance(input_path, output_path, weights_path, intensity, device):
         img = img.resize(orig_size, Image.LANCZOS)
         img.save(out_path)
 
+    # Fast Face Check using OpenCV Haar Cascades
+    try:
+        import cv2
+        import os
+        import sys
+        cascade_path = os.path.join(cv2.data.haarcascades, 'haarcascade_frontalface_default.xml')
+        face_cascade = cv2.CascadeClassifier(cascade_path)
+        image = cv2.imread(input_path)
+        if image is not None:
+            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+            faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=4, minSize=(30, 30))
+            if len(faces) == 0:
+                print("NO_FACE_DETECTED", file=sys.stderr)
+                sys.exit(2)
+    except Exception as e:
+        print(f"Face check failed: {e}", file=sys.stderr)
+
     print(f"Loading Generator on {device}...")
     gen = load_generator(weights_path, device)
     x, orig_size = process_image(input_path, device)
     print(f"Processing with intensity: {intensity}")
     with torch.no_grad():
-        out = gen(x, intensity=intensity)
+        raw_out = gen(x, intensity=intensity)
+        # Preserve identity based on any intensity level by blending with the original input
+        # At max intensity (1.0), we retain 50% of original pixels to guarantee identity preservation
+        alpha = float(intensity) * 0.5
+        out = x * (1.0 - alpha) + raw_out * alpha
     save_image(out, output_path, orig_size)
     print(f"Saved beautified image to {output_path}")
 

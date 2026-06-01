@@ -8,6 +8,23 @@ import uuid
 def run_beautify_model(input_path, output_path, intensity="0.5"):
     print("Initializing Official CodeFormer High-End Face Beautification...")
     
+    # Fast Face Check using OpenCV Haar Cascades
+    try:
+        import cv2
+        import os
+        cascade_path = os.path.join(cv2.data.haarcascades, 'haarcascade_frontalface_default.xml')
+        face_cascade = cv2.CascadeClassifier(cascade_path)
+        image = cv2.imread(input_path)
+        if image is not None:
+            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+            # detectMultiScale returns a list of rectangles
+            faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=4, minSize=(30, 30))
+            if len(faces) == 0:
+                print("NO_FACE_DETECTED", file=sys.stderr)
+                sys.exit(2)
+    except Exception as e:
+        print(f"Face check failed: {e}", file=sys.stderr)
+
     codeformer_dir = os.path.join(os.path.dirname(__file__), 'CodeFormer-master')
     temp_out_dir = os.path.join(os.path.dirname(__file__), 'temp_cf_out')
     
@@ -31,8 +48,9 @@ def run_beautify_model(input_path, output_path, intensity="0.5"):
     try:
         # The user's UI slider goes from 0.0 (No Enhancement) to 1.0 (Max Enhancement).
         # CodeFormer's -w is Fidelity: 1.0 (Exact original, no enhancement) to 0.0 (Max Quality/Enhancement).
-        # We invert the intensity so the slider acts as an "Enhancement" slider.
-        fidelity_weight = max(0.0, min(1.0, 1.0 - float(intensity)))
+        # To preserve identity based on any intensity level, we map intensity [0, 1] to fidelity [1.0, 0.5].
+        # This ensures fidelity never drops below 0.5, maintaining strong identity preservation.
+        fidelity_weight = max(0.5, min(1.0, 1.0 - (float(intensity) * 0.5)))
         
         # Run the official CodeFormer script
         cmd = [
