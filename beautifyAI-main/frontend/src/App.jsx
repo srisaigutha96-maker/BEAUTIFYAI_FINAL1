@@ -1904,7 +1904,7 @@ function UploadPage({ onBack }) {
     formData.append('intensity', intensity.toString());
 
     try {
-      const response = await fetch('/api/beautify', {
+      const response = await fetch('https://beautify-backend1.onrender.com/api/beautify', {
         method: 'POST',
         body: formData,
       });
@@ -2297,7 +2297,7 @@ function ChatAssistant() {
     setIsLoading(true);
 
     try {
-      const response = await fetch('/chat', {
+      const response = await fetch('https://beautify-backend1.onrender.com/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
