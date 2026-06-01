@@ -97,7 +97,7 @@ function LoginModal({ onClose, onLogin }) {
     if (!password) return showToast('Please enter your password.');
 
     try {
-      const res = await fetch('/api/login', {
+      const res = await fetch('https://beautify-backend1.onrender.com/api/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: email.trim(), password }),
@@ -122,7 +122,7 @@ function LoginModal({ onClose, onLogin }) {
     if (signupPwd.length < 8) return showToast('Password must be at least 8 characters.');
 
     try {
-      const res = await fetch('/api/signup', {
+      const res = await fetch('https://beautify-backend1.onrender.com/api/signup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -161,7 +161,7 @@ function LoginModal({ onClose, onLogin }) {
 
     setIsSendingReset(true);
     try {
-      const res = await fetch('/api/forgot-password', {
+      const res = await fetch('https://beautify-backend1.onrender.com/api/forgot-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: forgotEmail.trim() }),
@@ -199,7 +199,7 @@ function LoginModal({ onClose, onLogin }) {
 
     setIsVerifyingOtp(true);
     try {
-      const res = await fetch('/api/verify-otp', {
+      const res = await fetch('https://beautify-backend1.onrender.com/api/verify-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: forgotEmail.trim(), otp: resetOtp }),
@@ -227,7 +227,7 @@ function LoginModal({ onClose, onLogin }) {
 
     setIsResetting(true);
     try {
-      const res = await fetch('/api/reset-password', {
+      const res = await fetch('https://beautify-backend1.onrender.com/api/reset-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: forgotEmail.trim(), otp: resetOtp, password: resetNewPassword }),
